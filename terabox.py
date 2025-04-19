@@ -83,10 +83,7 @@ if len(DATABASE_URL) == 0:
     logging.error("DATABASE_URL variable is missing! Exiting now")
     exit(1)
 
-SHORTENER_API = os.environ.get('SHORTENER_API', '')
-if len(SHORTENER_API) == 0:
-    logging.info("SHORTENER_API variable is missing!")
-    SHORTENER_API = None
+
 
 
 USER_SESSION_STRING = os.environ.get('USER_SESSION_STRING', '')
