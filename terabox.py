@@ -175,7 +175,7 @@ async def start_command(client: Client, message: Message):
                 await message.reply_text("🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nInvalid token. Please generate a new one using /start.", reply_markup=reply_markup)
     else:
         user_id = message.from_user.id
-        if not has_valid_token(user_id):
+       ## if not has_valid_token(user_id):
             token = generate_uuid(user_id)
             long_url = f"https://redirect.jet-mirror.in/{app.me.username}/{token}"
             short_url = shorten_url(long_url)
