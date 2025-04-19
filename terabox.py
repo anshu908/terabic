@@ -147,65 +147,22 @@ async def start_command(client: Client, message: Message):
     developer_button = InlineKeyboardButton("ᴅᴇᴠᴇʟᴏᴘᴇʀ ⚡️", url="https://t.me/rishu1286")
     repo69 = InlineKeyboardButton("ʀᴇᴘᴏ 🌐", url="https://github.com/rishu1286")
     reply_markup = InlineKeyboardMarkup([[join_button, developer_button], [repo69]])
-    final_msg = "🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nYou already have a valid token!"
-    video_file_id = "/app/Jet-Mirror.mp4"
-    if len(message.command) > 1 and len(message.command[1]) == 36:
-        token = message.command[1]
-        user_id = message.from_user.id
 
-        if activate_token(user_id, token):
-            if os.path.exists(video_file_id):
-                await client.send_video(
-                    chat_id=message.chat.id,
-                    video=video_file_id,
-                    caption="🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nYour token has been activated successfully! You can now use the bot.",
-                    reply_markup=reply_markup
-                    )
-            else:
-                await message.reply_text("🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nYour token has been activated successfully! You can now use the bot.", reply_markup=reply_markup)
-        else:
-            if os.path.exists(video_file_id):
-                await client.send_video(
-                    chat_id=message.chat.id,
-                    video=video_file_id,
-                    caption="🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nInvalid token. Please generate a new one using /start.",
-                    reply_markup=reply_markup
-                    )
-            else:
-                await message.reply_text("🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nInvalid token. Please generate a new one using /start.", reply_markup=reply_markup)
+    video_file_id = "/app/Jet-Mirror.mp4"
+    caption = (
+        "🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\n"
+        "You can now use the bot freely without any token."
+    )
+
+    if os.path.exists(video_file_id):
+        await client.send_video(
+            chat_id=message.chat.id,
+            video=video_file_id,
+            caption=caption,
+            reply_markup=reply_markup
+        )
     else:
-        user_id = message.from_user.id
-       ## if not has_valid_token(user_id):
-            token = generate_uuid(user_id)
-            long_url = f"https://redirect.jet-mirror.in/{app.me.username}/{token}"
-            short_url = shorten_url(long_url)
-            if short_url:
-                reply_markup2 = InlineKeyboardMarkup([[InlineKeyboardButton("Generate Token Link", url=short_url)], [join_button, developer_button], [repo69]])
-                if os.path.exists(video_file_id):
-                    await client.send_video(
-                    chat_id=message.chat.id,
-                    video=video_file_id,
-                    caption="🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nPlease generate your Token, which will be valid for 12Hrs.",
-                    reply_markup=reply_markup2
-                    )
-                else:
-                    await message.reply_text(
-                    "🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\n"
-                    "Please generate your Token, which will be valid for 12Hrs.",
-                    reply_markup=reply_markup2
-                )
-            else:
-                await message.reply_text("Failed to generate the final link. Please try again.")
-        else:
-            if os.path.exists(video_file_id):
-                await client.send_video(
-                    chat_id=message.chat.id,
-                    video=video_file_id,
-                    caption=final_msg,
-                    reply_markup=reply_markup
-                    )
-            else:
-                await message.reply_text(final_msg, reply_markup=reply_markup)
+        await message.reply_text(caption, reply_markup=reply_markup)
 
 async def update_status_message(status_message, text):
     try:
