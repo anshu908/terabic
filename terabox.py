@@ -58,7 +58,7 @@ API_HASH = os.environ.get('TELEGRAM_HASH', '')
 if len(API_HASH) == 0:
     logging.error("TELEGRAM_HASH variable is missing! Exiting now")
     exit(1)
-    
+
 BOT_TOKEN = os.environ.get('BOT_TOKEN', '')
 if len(BOT_TOKEN) == 0:
     logging.error("BOT_TOKEN variable is missing! Exiting now")
@@ -83,7 +83,10 @@ if len(DATABASE_URL) == 0:
     logging.error("DATABASE_URL variable is missing! Exiting now")
     exit(1)
 
-
+SHORTENER_API = os.environ.get('SHORTENER_API', '')
+if len(SHORTENER_API) == 0:
+    logging.info("SHORTENER_API variable is missing!")
+    SHORTENER_API = None
 
 
 USER_SESSION_STRING = os.environ.get('USER_SESSION_STRING', '')
@@ -124,7 +127,7 @@ async def is_user_member(client, user_id):
     except Exception as e:
         logging.error(f"Error checking membership status for user {user_id}: {e}")
         return False
-    
+
 def is_valid_url(url):
     parsed_url = urlparse(url)
     return any(parsed_url.netloc.endswith(domain) for domain in VALID_DOMAINS)
@@ -139,30 +142,119 @@ def format_size(size):
     else:
         return f"{size / (1024 * 1024 * 1024):.2f} GB"
 
+def shorten_url(url):
+    #You can change api_url with your choice shortener
+    api_url = "https://api.modijiurl.com/api"
+    params = {
+        "api": SHORTENER_API,
+        "url": url
+    }
+    try:
+        response = requests.get(api_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("status") == "success":
+            return data.get("shortenedUrl")
+        elif SHORTENER_API is None:
+            return url
+        else:
+            logger.error(f"Failed to shorten URL: {data}")
+            return url
+    except Exception as e:
+        logger.error(f"Error shortening URL: {e}")
+        return url
 
+def generate_uuid(user_id):
+    token = str(uuid.uuid4())
+    collection.update_one(
+        {"user_id": user_id},
+        {"$set": {"token": token, "token_status": "inactive", "token_expiry": None}},
+        upsert=True
+    )
+    return token
+
+def activate_token(user_id, token):
+    user_data = collection.find_one({"user_id": user_id, "token": token})
+    if user_data:
+        collection.update_one(
+            {"user_id": user_id, "token": token},
+            {"$set": {"token_status": "active", "token_expiry": datetime.now() + timedelta(hours=12)}}
+        )
+        return True
+    return False
+
+def has_valid_token(user_id):
+    user_data = collection.find_one({"user_id": user_id})
+    if user_data and user_data.get("token_status") == "active":
+        if datetime.now() < user_data.get("token_expiry"):
+            return True
+    return False
 
 @app.on_message(filters.command("start"))
 async def start_command(client: Client, message: Message):
-    join_button = InlineKeyboardButton("ᴊᴏɪɴ ❤️🚀", url="https://t.me/ur_rishu_143")
+    join_button = InlineKeyboardButton("ᴊᴏɪɴ ❤️🚀", url="https://t.me/rishucoder")
     developer_button = InlineKeyboardButton("ᴅᴇᴠᴇʟᴏᴘᴇʀ ⚡️", url="https://t.me/rishu1286")
-    repo69 = InlineKeyboardButton("ʀᴇᴘᴏ 🌐", url="https://github.com/rishu1286")
+    repo69 = InlineKeyboardButton("ʀᴇᴘᴏ 🌐", url="https://github.com/rishubot")
     reply_markup = InlineKeyboardMarkup([[join_button, developer_button], [repo69]])
-
+    final_msg = "🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nYou already have a valid token!"
     video_file_id = "/app/Jet-Mirror.mp4"
-    caption = (
-        "🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\n"
-        "You can now use the bot freely without any token."
-    )
+    if len(message.command) > 1 and len(message.command[1]) == 36:
+        token = message.command[1]
+        user_id = message.from_user.id
 
-    if os.path.exists(video_file_id):
-        await client.send_video(
-            chat_id=message.chat.id,
-            video=video_file_id,
-            caption=caption,
-            reply_markup=reply_markup
-        )
+        if activate_token(user_id, token):
+            if os.path.exists(video_file_id):
+                await client.send_video(
+                    chat_id=message.chat.id,
+                    video=video_file_id,
+                    caption="🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nYour token has been activated successfully! You can now use the bot.",
+                    reply_markup=reply_markup
+                    )
+            else:
+                await message.reply_text("🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nYour token has been activated successfully! You can now use the bot.", reply_markup=reply_markup)
+        else:
+            if os.path.exists(video_file_id):
+                await client.send_video(
+                    chat_id=message.chat.id,
+                    video=video_file_id,
+                    caption="🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nInvalid token. Please generate a new one using /start.",
+                    reply_markup=reply_markup
+                    )
+            else:
+                await message.reply_text("🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nInvalid token. Please generate a new one using /start.", reply_markup=reply_markup)
     else:
-        await message.reply_text(caption, reply_markup=reply_markup)
+        user_id = message.from_user.id
+        if not has_valid_token(user_id):
+            token = generate_uuid(user_id)
+            long_url = f"https://redirect.jet-mirror.in/{app.me.username}/{token}"
+            short_url = shorten_url(long_url)
+            if short_url:
+                reply_markup2 = InlineKeyboardMarkup([[InlineKeyboardButton("Generate Token Link", url=short_url)], [join_button, developer_button], [repo69]])
+                if os.path.exists(video_file_id):
+                    await client.send_video(
+                    chat_id=message.chat.id,
+                    video=video_file_id,
+                    caption="🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\nPlease generate your Token, which will be valid for 12Hrs.",
+                    reply_markup=reply_markup2
+                    )
+                else:
+                    await message.reply_text(
+                    "🌟 ɪ ᴀᴍ ᴀ ᴛᴇʀᴀʙᴏx ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ʙᴏᴛ.\n\n"
+                    "Please generate your Token, which will be valid for 12Hrs.",
+                    reply_markup=reply_markup2
+                )
+            else:
+                await message.reply_text("Failed to generate the final link. Please try again.")
+        else:
+            if os.path.exists(video_file_id):
+                await client.send_video(
+                    chat_id=message.chat.id,
+                    video=video_file_id,
+                    caption=final_msg,
+                    reply_markup=reply_markup
+                    )
+            else:
+                await message.reply_text(final_msg, reply_markup=reply_markup)
 
 async def update_status_message(status_message, text):
     try:
@@ -181,7 +273,7 @@ async def handle_message(client: Client, message: Message):
     is_member = await is_user_member(client, user_id)
 
     if not is_member:
-        join_button = InlineKeyboardButton("ᴊᴏɪɴ ❤️🚀", url="https://t.me/rishu_mood")
+        join_button = InlineKeyboardButton("ᴊᴏɪɴ ❤️🚀", url="https://t.me/jetmirror")
         reply_markup = InlineKeyboardMarkup([[join_button]])
         await message.reply_text("ʏᴏᴜ ᴍᴜsᴛ ᴊᴏɪɴ ᴍʏ ᴄʜᴀɴɴᴇʟ ᴛᴏ ᴜsᴇ ᴍᴇ.", reply_markup=reply_markup)
         return
@@ -192,7 +284,7 @@ async def handle_message(client: Client, message: Message):
             "Please generate a new token using /start."
         )
         return
-    
+
     url = None
     for word in message.text.split():
         if is_valid_url(word):
@@ -284,7 +376,7 @@ async def handle_message(client: Client, message: Message):
             original_ext = os.path.splitext(input_path)[1].lower() or '.mp4'
             start_time = datetime.now()
             last_progress_update = time.time()
-            
+
             proc = await asyncio.create_subprocess_exec(
                 'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
                 '-of', 'default=noprint_wrappers=1:nokey=1', input_path,
@@ -293,16 +385,16 @@ async def handle_message(client: Client, message: Message):
             )
             stdout, _ = await proc.communicate()
             total_duration = float(stdout.decode().strip())
-            
+
             file_size = os.path.getsize(input_path)
             parts = math.ceil(file_size / split_size)
-            
+
             if parts == 1:
                 return [input_path]
-            
+
             duration_per_part = total_duration / parts
             split_files = []
-            
+
             for i in range(parts):
                 current_time = time.time()
                 if current_time - last_progress_update >= UPDATE_INTERVAL:
@@ -314,7 +406,7 @@ async def handle_message(client: Client, message: Message):
                     )
                     await update_status(status_message, status_text)
                     last_progress_update = current_time
-                
+
                 output_path = f"{output_prefix}.{i+1:03d}{original_ext}"
                 cmd = [
                     'xtra', '-y', '-ss', str(i * duration_per_part),
@@ -323,11 +415,11 @@ async def handle_message(client: Client, message: Message):
                     '-avoid_negative_ts', 'make_zero',
                     output_path
                 ]
-                
+
                 proc = await asyncio.create_subprocess_exec(*cmd)
                 await proc.wait()
                 split_files.append(output_path)
-            
+
             return split_files
         except Exception as e:
             logger.error(f"Split error: {e}")
@@ -335,19 +427,19 @@ async def handle_message(client: Client, message: Message):
 
     async def handle_upload():
         file_size = os.path.getsize(file_path)
-        
+
         if file_size > SPLIT_SIZE:
             await update_status(
                 status_message,
                 f"✂️ Splitting {download.name} ({format_size(file_size)})"
             )
-            
+
             split_files = await split_video_with_ffmpeg(
                 file_path,
                 os.path.splitext(file_path)[0],
                 SPLIT_SIZE
             )
-            
+
             try:
                 for i, part in enumerate(split_files):
                     part_caption = f"{caption}\n\nPart {i+1}/{len(split_files)}"
@@ -356,7 +448,7 @@ async def handle_message(client: Client, message: Message):
                         f"📤 Uploading part {i+1}/{len(split_files)}\n"
                         f"{os.path.basename(part)}"
                     )
-                    
+
                     if USER_SESSION_STRING:
                         sent = await user.send_video(
                             DUMP_CHAT_ID, part, 
@@ -387,7 +479,7 @@ async def handle_message(client: Client, message: Message):
                 f"📤 Uploading {download.name}\n"
                 f"Size: {format_size(file_size)}"
             )
-            
+
             if USER_SESSION_STRING:
                 sent = await user.send_video(
                     DUMP_CHAT_ID, file_path,
