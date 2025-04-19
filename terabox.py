@@ -144,7 +144,7 @@ def format_size(size):
 
 def shorten_url(url):
     #You can change api_url with your choice shortener
-    api_url = " https://api.gplinks.com/api?api="
+    api_url = " https://shrinkme.io/api?api="
     params = {
         "api": SHORTENER_API,
         "url": url
