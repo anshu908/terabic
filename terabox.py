@@ -1,3 +1,4 @@
+# --- full script with API replacement (only relevant changes shown inline) ---
 from aria2p import API as Aria2API, Client as Aria2Client
 import asyncio
 from dotenv import load_dotenv
@@ -15,9 +16,12 @@ from urllib.parse import urlparse
 from flask import Flask, render_template
 from threading import Thread
 
+# NEW: async HTTP client
+import aiohttp
+
 load_dotenv('config.env', override=True)
 logging.basicConfig(
-    level=logging.INFO,  
+    level=logging.INFO,
     format="[%(asctime)s - %(name)s - %(levelname)s] %(message)s - %(filename)s:%(lineno)d"
 )
 
@@ -44,7 +48,6 @@ options = {
 }
 
 aria2.set_global_options(options)
-
 API_ID = os.environ.get('TELEGRAM_API', '')
 if len(API_ID) == 0:
     logging.error("TELEGRAM_API variable is missing! Exiting now")
@@ -88,9 +91,9 @@ if USER_SESSION_STRING:
     SPLIT_SIZE = 4241280205
 
 VALID_DOMAINS = [
-    'terabox.com', 'nephobox.com', '4funbox.com', 'mirrobox.com', 
-    'momerybox.com', 'teraboxapp.com', '1024tera.com', 
-    'terabox.app', 'gibibox.com', 'goaibox.com', 'terasharelink.com', 
+    'terabox.com', 'nephobox.com', '4funbox.com', 'mirrobox.com',
+    'momerybox.com', 'teraboxapp.com', '1024tera.com',
+    'terabox.app', 'gibibox.com', 'goaibox.com', 'terasharelink.com',
     'teraboxlink.com', 'terafileshare.com'
 ]
 last_update_time = 0
@@ -171,14 +174,66 @@ async def handle_message(client: Client, message: Message):
         await message.reply_text("Please provide a valid Terabox link.")
         return
 
-    encoded_url = urllib.parse.quote(url)
-    final_url = f"https://teradlrobot.cheemsbackup.workers.dev/?url={encoded_url}"
+    # -----------------------------
+    # NEW: call revangeapi to get JSON (file_name, directlink, thumb, sizebytes)
+    # -----------------------------
+    api_base = "https://teraboxdownloderapi.revangeapi.workers.dev/"
+    # Make sure we pass the raw terabox url as query param
+    api_url = f"{api_base}?url={urllib.parse.quote(url, safe='')}"
+    status_message = await message.reply_text("🔎 Resolving Terabox link...")
 
-    download = aria2.add_uris([final_url])
-    status_message = await message.reply_text("sᴇɴᴅɪɴɢ ʏᴏᴜ ᴛʜᴇ ᴍᴇᴅɪᴀ...🤤")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url, timeout=30) as resp:
+                if resp.status != 200:
+                    await status_message.edit_text(f"❌ API error: received status {resp.status}")
+                    return
+                data = await resp.json()
+    except asyncio.TimeoutError:
+        await status_message.edit_text("❌ API request timed out. Try again later.")
+        return
+    except Exception as e:
+        logger.error(f"Error calling revange API: {e}")
+        await status_message.edit_text("❌ Failed to contact Terabox API.")
+        return
+
+    # Validate expected keys
+    if not data or 'directlink' not in data or 'file_name' not in data:
+        logger.error(f"Unexpected API response: {data}")
+        await status_message.edit_text("❌ Unexpected API response. Could not get direct link.")
+        return
+
+    file_name = data.get('file_name') or f"terabox_download_{int(time.time())}"
+    directlink = data.get('directlink')
+    thumb = data.get('thumb')
+    size_human = data.get('size')  # e.g. "726.66 MB"
+    size_bytes = data.get('sizebytes')
+
+    # Inform user about resolved file
+    info_text = f"✅ Resolved: {file_name}\n"
+    if size_human:
+        info_text += f"Size: {size_human}\n"
+    info_text += "Starting download..."
+    await status_message.edit_text(info_text)
+
+    # Add the direct link to aria2 and set output filename via options
+    try:
+        # ensure directlink is a string
+        if not isinstance(directlink, str) or not directlink.startswith("http"):
+            await status_message.edit_text("❌ Direct link returned by API is invalid.")
+            return
+
+        aria_options = {'out': file_name}
+        # if you want to provide referer or header options, add them here (e.g. 'header': 'Referer: ...')
+        download = aria2.add_uris([directlink], options=aria_options)
+    except Exception as e:
+        logger.error(f"Failed to add aria2 download: {e}")
+        await status_message.edit_text("❌ Failed to enqueue download in aria2.")
+        return
 
     start_time = datetime.now()
 
+    # the rest of the previous loop continues the same, we reuse it to track progress
     while not download.is_complete:
         await asyncio.sleep(15)
         download.update()
@@ -205,6 +260,7 @@ async def handle_message(client: Client, message: Message):
                 logger.error(f"Flood wait detected! Sleeping for {e.value} seconds")
                 await asyncio.sleep(e.value)
 
+    # proceed with upload phase exactly as before
     file_path = download.files[0].path
     caption = (
         f"✨ {download.name}\n"
@@ -239,7 +295,7 @@ async def handle_message(client: Client, message: Message):
             f"┏ ғɪʟᴇɴᴀᴍᴇ: {download.name}\n"
             f"┠ [{'★' * int(progress / 10)}{'☆' * (10 - int(progress / 10))}] {progress:.2f}%\n"
             f"┠ ᴘʀᴏᴄᴇssᴇᴅ: {format_size(current)} ᴏғ {format_size(total)}\n"
-            f"┠ sᴛᴀᴛᴜs: 📤 Uploading to Telegram\n"
+            f"┠ ᴘʀᴏᴄᴇss: 📤 Uploading to Telegram\n"
             f"┠ ᴇɴɢɪɴᴇ: <b><u>PyroFork v2.2.11</u></b>\n"
             f"┠ sᴘᴇᴇᴅ: {format_size(current / elapsed_time.seconds if elapsed_time.seconds > 0 else 0)}/s\n"
             f"┠ ᴇʟᴀᴘsᴇᴅ: {elapsed_minutes}m {elapsed_seconds}s\n"
@@ -247,6 +303,7 @@ async def handle_message(client: Client, message: Message):
         )
         await update_status(status_message, status_text)
 
+    # split & upload functions (unchanged)...
     async def split_video_with_ffmpeg(input_path, output_prefix, split_size):
         try:
             original_ext = os.path.splitext(input_path)[1].lower() or '.mp4'
@@ -327,7 +384,7 @@ async def handle_message(client: Client, message: Message):
 
                     if USER_SESSION_STRING:
                         sent = await user.send_video(
-                            DUMP_CHAT_ID, part, 
+                            DUMP_CHAT_ID, part,
                             caption=part_caption,
                             progress=upload_progress
                         )
@@ -387,6 +444,7 @@ async def handle_message(client: Client, message: Message):
     except Exception as e:
         logger.error(f"Cleanup error: {e}")
 
+# --- Flask keep-alive and user client code remains unchanged ---
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
